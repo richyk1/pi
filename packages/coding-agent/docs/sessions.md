@@ -53,6 +53,66 @@ Use `--no-session` for an ephemeral run. An ephemeral session cannot be resumed 
 
 Use `--session` when you already know the session path or ID. Use `--fork` to create a new session from an existing session before interactive mode starts.
 
+## Move a session between machines
+
+Stop Pi between turns, then run:
+
+```bash
+pi handoff push --out /tmp/work.json.gz
+# Copy that one file to the other machine.
+pi handoff pull /tmp/work.json.gz --cwd /path/to/empty/project
+```
+
+Pull prints the exact `cd ... && pi --session ...` command. It keeps the session
+ID and every transcript entry unchanged. Only the header's working directory
+changes, and the file moves into the session directory for the new path.
+`PI_CODING_AGENT_SESSION_DIR` and the `sessionDir` setting apply on each machine.
+Pull resolves directory aliases to their real paths before storing the session,
+so resuming or pushing after `cd` uses the same working-directory identity.
+
+The gzip-compressed JSON bundle contains a complete `git bundle` of local refs
+and HEAD, separate binary staged and unstaged patches, non-ignored untracked
+files, and project-level `.pi/` files (including ignored settings). It restores
+without a remote. Git remote URLs, Git config, hooks, global Pi settings and
+credentials are not copied. The target must be empty; existing work is never
+overwritten. The current directory can be inside a repository; `--cwd` selects
+the restored repository root, and the resume command returns to the same
+relative directory.
+
+Push rejects known credential filenames and detected inline keys rather than
+silently changing a workspace. Ignored `.env` and `.env.*` files are not
+included. Review the repository history and transcript before export: secret
+detection cannot identify arbitrary private data. Treat bundles as private.
+Submodules and repositories without a commit are not supported. Stop all
+workspace writers before exporting. This command does not snapshot running
+processes, sockets, provider streams or model caches.
+
+Push and pull do not call a model or generate a summary. Normal continuation
+requests still send and pay for conversation context. Bundle size grows with
+history, transcript and workspace changes.
+
+From a source checkout, run the real-model host/container/host demonstration:
+
+```bash
+npm ci --ignore-scripts
+npm run hydrate:model-data
+npm run build:offline
+./handoff-demo.sh
+```
+
+It requires Docker, Node.js 22.19+, Git and `ANTHROPIC_API_KEY`. Alternatively set
+`PI_DEMO_ENV` to a local dotenv file; only its Anthropic key is loaded, without
+printing or bundling it. The script queries available models once, picks the
+newest Haiku (or Sonnet if none), and disables retries, compaction and cache
+warming. An explicit extension caps the entire run at six Messages requests,
+512 output tokens per request and a conservative $0.50 reservation. Docker
+receives the key through its environment, never through an image or archive.
+The demo retains its temporary directory and prints entry counts, transcript
+hash equality across moves, workspace diffs, bundle sizes and per-turn usage.
+If execution stops after the first saved turn, use
+`./handoff-demo.sh resume /path/to/printed/artifacts` to keep the same session,
+model selection and request budget instead of paying for that turn again.
+
 ## Export or share a session
 
 Use `/export` to write the current session as HTML or JSONL. Use `/share` to upload it and get a viewer link. Pi uses a Radius artifact when Radius authentication is configured; otherwise, it uses a private GitHub gist.
